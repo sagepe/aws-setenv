@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+
+require "aws_config"
+require "aws-sdk"
+# For Debugging:
+require "pp"
+
+# Usgage information
+def usage
+  puts "Usage: " + File.basename($0) + " <AWS profile name>\n"
+  exit
+end
+
+# Input processing.
+# We need a profile name as an argument.
+if ARGV.empty?
+  usage()
+else
+  # Pop our first argument into a  suitable variable.
+  # Any other arguments will be silently ignored.
+  profile = ARGV.shift
+  # Check that our argument is a valid profile name.
+  usage() unless AWSConfig[profile]
+end
+
+# We should have a valid profile name.
+# Initialize a variable to hold our environment data.
+aws_environment_vars = {
+  :aws_default_profile   => profile,
+  :aws_access_key_id     => nil,
+  :aws_secret_access_key => nil,
+  :aws_session_token     => nil,
+  :aws_security_token    => nil,
+  :aws_default_region    => 'eu-west-1'
+}
+
+# Next, check to see whether we have to assume a role.
+assume_options = {}
+if assume_options[:role_arn] = AWSConfig[profile]["role_arn"]
+  # Add in oir session name.
+  assume_options[:role_session_name] = profile
+  # Check to see whether we need and MFA code.
+  if assume_options[:serial_number] = AWSConfig[profile]["mfa_serial"]
+    print "MFA code: "
+    assume_options[:token_code] = gets.chomp
+  end
+  # We might need and external_id as well
+  if AWSConfig[profile]["external_id"]
+    assume_options[:external_id] = AWSConfig[profile]["external_id"]
+  end
+  # Connect to STS and get our credentials.
+  # First, we need a client object.
+  sts_client = Aws::STS::Client.new(
+    region:            AWSConfig[profile]["region"],
+    access_key_id:     AWSConfig[profile]["aws_access_key_id"],
+    secret_access_key: AWSConfig[profile]["aws_secret_access_key"]
+    )
+  # Next, use the assume_role method and pass in our hash of options.
+  assume_role_response = sts_client.assume_role( assume_options )
+  aws_environment_vars[:aws_secret_access_key] =
+    assume_role_response.credentials.secret_access_key
+  aws_environment_vars[:aws_access_key_id] =
+    assume_role_response.credentials.access_key_id
+  aws_environment_vars[:aws_session_token] =
+    assume_role_response.credentials.session_token
+  aws_environment_vars[:aws_security_token] =
+    assume_role_response.credentials.session_token
+else
+  # Juat use the access and secret keys in AWSConfig[profile]
+  aws_environment_vars[:aws_secret_access_key] =
+    AWSConfig[profile]["aws_secret_access_key"]
+  aws_environment_vars[:aws_access_key_id] =
+    AWSConfig[profile]["aws_access_key_id"]
+end
+
+# Print some variables suitable for a shell, including
+# removing any that might no longer be needed.
+aws_environment_vars.each do |key, value|
+  if value.nil?
+    puts "unset " + key.to_s.upcase
+  else
+    puts "export " + key.to_s.upcase + "=" + value
+  end
+end
