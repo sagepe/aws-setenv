@@ -31,7 +31,7 @@ aws_environment_vars = {
   :aws_secret_access_key => nil,
   :aws_session_token     => nil,
   :aws_security_token    => nil,
-  :aws_default_region    => 'eu-west-1'
+  :aws_default_region    => 'eu-west-2'
 }
 
 # Next, check to see whether we have to assume a role.
